@@ -7,11 +7,11 @@ import random
 config = {
     "image_width":1200,
     "image_height":1200,
-    "number_particles":1000,
+    "number_particles":5000,
     "odometry_noise_mean":0, # Bias on longitudinal movement readings (-1 to 1)
-    "odometry_noise_std":0.015, # Std deviation on longitudinal movement readings (0 to 1)
+    "odometry_noise_std":0.004, # Std deviation on longitudinal movement readings (0 to 1)
     "heading_noise_mean":0, # Bias on heading movement readings (-pi to pi)
-    "heading_noise_std":np.pi/45, # Std deviation on heading movement readings (0 to 2pi)
+    "heading_noise_std":np.pi/180, # Std deviation on heading movement readings (0 to 2pi)
     "ranger_noise_mean":0, # Bias on ranger measurements (-1 to 1)
     "ranger_noise_std_prop": 0.00001, # Scaler that makes std deviation proportional to distance on range measurements (0 to 1)
     "ranger_max_dist":0.8 # 0 to 1
@@ -70,6 +70,10 @@ class Viz():
             y = int(self.config["image_height"] - (y * self.unit2pix))
             color = int(prob * 255)
             cv2.circle(image, (x,y), 1,color,1,-1)
+
+        x = np.mean(particles[:,0])
+        y = np.mean(particles[:,1])
+        cv2.circle(image, self.world_to_image((x,y)), 3,(0,0,255),1,-1)
         return image
 
 
@@ -81,7 +85,7 @@ class ParticleFilter():
 
         # Create n particles uniformly sampled over state space (1x1 grid) with the same probability
         state_vector_size = (self.config["number_particles"],4) # x+y+heading+probability
-        self.particles = np.random.uniform((0,0,0,1),(1,1,0,1),state_vector_size)
+        self.particles = np.random.uniform((0,0,0,1),(1,1,2*np.pi,1),state_vector_size)
 
 
     def update(self,robot_movement,robot_ranger_measurement):
@@ -125,6 +129,8 @@ class ParticleFilter():
         probabilities = self.particles[:,3]
         idx = np.random.choice(self.config["number_particles"], self.config["number_particles"], p=probabilities)
         self.particles = self.particles[idx]
+        # explore
+        self.particles[:30] = np.random.uniform((0,0,0,0),(1,1,2*np.pi,0),(30,4))
 
 
 class World():
@@ -194,12 +200,12 @@ if __name__=="__main__":
     viz = Viz(config)
     pf = ParticleFilter(config,world)
 
-    robot = np.array((0.3,0.2,0))
+    robot = np.array((0.2,0.2,np.pi))
 
     ranger = 0.8
     while True:
 
-        movement = np.array((0.005,(0.2-min(ranger,0.2))*0.9))
+        movement = np.array((0.005,(0.2-min(ranger,0.2))*-1.2))
 
         robot[2] += movement[1] # Move heading
         robot[0] += movement[0] * np.cos(robot[2]) # Move x based on heading and step size
